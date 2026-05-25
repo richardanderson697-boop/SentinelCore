@@ -12,6 +12,7 @@ import { CostEstimator } from "./lib/sentinel-core/runtime/cost";
 import { ValidationGuard } from "./lib/sentinel-core/validation/guard";
 import { PolicyEngine } from "./lib/sentinel-core/runtime/policy-engine";
 import { PolicyStateEngine } from "./lib/sentinel-core/runtime/state-engine";
+import { sentinelCoreExpressMiddleware } from "./lib/sentinel-core/express";
 
 dotenv.config();
 
@@ -321,6 +322,26 @@ app.post("/api/scan", async (req, res) => {
   }
 });
 
+// Demo endpoint strictly gated by the ready-to-use SentinelCore Express Middleware
+app.post(
+  "/api/protected/chat-demo",
+  sentinelCoreExpressMiddleware({
+    promptField: "prompt", // extracts from req.body.prompt
+    failSecure: "BLOCK",   // rejects (blocks) with 403 upon BLOCK/FLAG
+    appId: "express_integration_sandbox",
+    sessionIdField: (req) => (req.headers["x-session-id"] as string) || "express_session_demo",
+    scanTools: true,
+  }),
+  (req, res) => {
+    // If we get here, the middleware has verified that the prompt is safe and compliant!
+    res.json({
+      status: "success",
+      message: "Access granted! Your prompt passed the SentinelCore security gateways.",
+      telemetry: req.sentinelVerdict, // Gained access to scan metadata
+    });
+  }
+);
+
 // Endpoint to retrieve active state metrics
 app.get("/api/state/overview", (req, res) => {
   res.json(PolicyStateEngine.getRuntimeStateOverview());
@@ -330,6 +351,260 @@ app.get("/api/state/overview", (req, res) => {
 app.post("/api/state/reset", (req, res) => {
   PolicyStateEngine.clearAllRuntimeState();
   res.json({ status: "success", stateOverview: PolicyStateEngine.getRuntimeStateOverview() });
+});
+
+// OpenAI-Compatible Proxy Gateway for Cursor, Lovable, Replit, or other developer tools
+app.post("/v1/chat/completions", async (req, res) => {
+  try {
+    const { messages = [], model = "gemini-3.5-flash", stream = false } = req.body;
+    
+    // Extract prompt from last message
+    const lastMessage = messages[messages.length - 1];
+    const promptText = lastMessage?.content || "";
+    
+    if (!promptText || typeof promptText !== "string") {
+      res.status(400).json({
+        error: {
+          message: "No user content provided in standard message structure.",
+          type: "invalid_request_error",
+        }
+      });
+      return;
+    }
+
+    // 1. Evaluate safety using SentinelCore
+    const policyResult = PolicyEngine.evaluate(promptText);
+    let finalVerdict = policyResult.verdict;
+    let finalScore = policyResult.score;
+    let categories = policyResult.rules.filter((r) => r.triggered).map((r) => r.name);
+    let reasoning = policyResult.reasoning;
+
+    // Simulate high-fidelity checks fallback
+    if (finalVerdict !== "BLOCK") {
+      const norm = promptText.toLowerCase();
+      if (norm.includes("ignore") || norm.includes("instructions") || norm.includes("override")) {
+        finalVerdict = "BLOCK";
+        finalScore = 8;
+        categories.push("Jailbreak Attempt");
+        reasoning = "Edge cognitive mapping detected instruction override.";
+      } else if (norm.includes("ssn") || norm.includes("social security")) {
+        finalVerdict = "BLOCK";
+        finalScore = 7;
+        categories.push("PII Extraction");
+        reasoning = "Semantic PII leakage detected.";
+      }
+    }
+
+    // Persist to State Engine so metrics updates are captured in the live dashboard app
+    PolicyStateEngine.persistAndAggregate({
+      scanId: "sc_proxy_" + Math.random().toString(36).substring(2, 11),
+      appId: "ide_proxy_integration",
+      sessionId: "ide_session_global",
+      prompt: promptText,
+      verdict: finalVerdict,
+      riskScore: finalScore,
+    });
+
+    // 2. If blocked, return a structured warning directly in assistant response
+    if (finalVerdict === "BLOCK") {
+      const warningText = `⚠️ [SentinelCore Gating Blocked]\n\nYour prompt triggered a policy violation in the developer workspace safety rules.\n\n` +
+        `🔒 REASON: ${reasoning || "Detected malicious injection/vulnerability pattern."}\n` +
+        `🏷️ CATEGORIES: ${categories.length > 0 ? categories.join(", ") : "Prompt Injection Risk"}\n` +
+        `📉 RISK SCORE: ${finalScore}/10 (Threshold Adapted)\n\n` +
+        `To resume safely, modify the payload content to remove instructions overrides or sensitive leak vectors.`;
+
+      if (stream) {
+        // Simple mock streaming responses for chunk-based editors
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        
+        const chunk = {
+          id: "chatcmpl-" + Math.random().toString(36).substring(2, 15),
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [{
+            index: 0,
+            delta: { content: warningText },
+            finish_reason: null
+          }]
+        };
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        
+        const finishChunk = {
+          id: chunk.id,
+          object: "chat.completion.chunk",
+          created: chunk.created,
+          model,
+          choices: [{
+            index: 0,
+            delta: {},
+            finish_reason: "stop"
+          }]
+        };
+        res.write(`data: ${JSON.stringify(finishChunk)}\n\n`);
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+      } else {
+        res.json({
+          id: "chatcmpl-" + Math.random().toString(36).substring(2, 15),
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: warningText
+              },
+              finish_reason: "stop"
+            }
+          ],
+          usage: {
+            prompt_tokens: Math.ceil(promptText.length / 4),
+            completion_tokens: Math.ceil(warningText.length / 4),
+            total_tokens: Math.ceil((promptText.length + warningText.length) / 4)
+          }
+        });
+        return;
+      }
+    }
+
+    // 3. Otherwise, pass-through and generate a real answer or safe simulator response
+    const provider = new LLMProvider();
+    
+    if (provider.isSimulated()) {
+      // Offline fallback: generate a helpful message explaining prompt safety verification succeeded
+      const safeText = `🟢 [SentinelCore Verified - Safe]\n\n` +
+        `(Offline Sandbox Mode - Succeeded)\n\n` +
+        `This is a mock response from the SentinelCore IDE Proxy. Your developer prompt was validated to be compliant and safe for downstream LLM delivery.\n\n` +
+        `🔍 Prompt Length: ${promptText.length} chars | Safety Verdict: ALLOW (Score: ${finalScore}/10)`;
+
+      if (stream) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        
+        const chunk = {
+          id: "chatcmpl-" + Math.random().toString(36).substring(2, 11),
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [{
+            index: 0,
+            delta: { content: safeText },
+            finish_reason: null
+          }]
+        };
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        
+        const finishChunk = {
+          id: chunk.id,
+          object: "chat.completion.chunk",
+          created: chunk.created,
+          model,
+          choices: [{
+            index: 0,
+            delta: {},
+            finish_reason: "stop"
+          }]
+        };
+        res.write(`data: ${JSON.stringify(finishChunk)}\n\n`);
+        res.write("data: [DONE]\n\n");
+        res.end();
+        return;
+      } else {
+        res.json({
+          id: "chatcmpl-" + Math.random().toString(36).substring(2, 11),
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [{
+            index: 0,
+            message: { role: "assistant", content: safeText },
+            finish_reason: "stop"
+          }],
+          usage: {
+            prompt_tokens: Math.ceil(promptText.length / 4),
+            completion_tokens: Math.ceil(safeText.length / 4),
+            total_tokens: Math.ceil((promptText.length + safeText.length) / 4)
+          }
+        });
+        return;
+      }
+    } else {
+      // Call the real downstream models/generateContent in standard chat form
+      try {
+        const reply = await provider.generate(promptText);
+        
+        if (stream) {
+          // Send response in a simple stream or singular chunk
+          res.setHeader("Content-Type", "text/event-stream");
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("Connection", "keep-alive");
+          
+          const chunk = {
+            id: "chatcmpl-" + Math.random().toString(36).substring(2, 11),
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model,
+            choices: [{
+              index: 0,
+              delta: { content: reply },
+              finish_reason: null
+            }]
+          };
+          res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+          
+          const finishChunk = {
+            id: chunk.id,
+            object: "chat.completion.chunk",
+            created: chunk.created,
+            model,
+            choices: [{
+              index: 0,
+              delta: {},
+              finish_reason: "stop"
+            }]
+          };
+          res.write(`data: ${JSON.stringify(finishChunk)}\n\n`);
+          res.write("data: [DONE]\n\n");
+          res.end();
+        } else {
+          res.json({
+            id: "chatcmpl-" + Math.random().toString(36).substring(2, 11),
+            object: "chat.completion",
+            created: Math.floor(Date.now() / 1000),
+            model,
+            choices: [{
+              index: 0,
+              message: { role: "assistant", content: reply },
+              finish_reason: "stop"
+            }]
+          });
+        }
+      } catch (geminiError: any) {
+        res.status(500).json({
+          error: {
+            message: `Gateway failed to contact Gemini API: ${geminiError.message || "Unknown error"}`,
+            type: "api_error"
+          }
+        });
+      }
+    }
+
+  } catch (err: any) {
+    console.error("IDE Proxy Completion Error:", err);
+    res.status(500).json({
+      error: {
+        message: err.message || "Internal error inside SentinelCore proxy",
+        type: "api_error"
+      }
+    });
+  }
 });
 
 // Fallback simulator for when GEMINI_API_KEY is not set

@@ -17,3 +17,6 @@ export type { SentinelVerdictData } from "./validation/schema";
 
 export { SentinelGenkitMiddleware, sentinelCorePlugin } from "./genkit";
 export type { GenkitMiddlewareOptions } from "./genkit";
+
+export { sentinelCoreExpressMiddleware } from "./express";
+export type { SentinelExpressMiddlewareOptions } from "./express";

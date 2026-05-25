@@ -74,7 +74,36 @@ export const queryDatabase = defineTool(
 );
 ```
 
-### 3. Stateless Manual Gating API
+### 3. Securing Express.js Endpoints with Gating Middleware
+
+For standard (non-Genkit) Web apps, secure any API endpoint instantly using the native Express middleware:
+
+```typescript
+import express from 'express';
+import { sentinelCoreExpressMiddleware } from 'sentinel-core-sdk';
+
+const app = express();
+app.use(express.json());
+
+// Protect generation backend. Violations automatically yield a 403 response.
+app.post(
+  '/api/generate',
+  sentinelCoreExpressMiddleware({
+    promptField: 'prompt', // Extract from req.body.prompt (or a custom function)
+    failSecure: 'BLOCK',   // 'BLOCK' | 'FLAG' | 'ALLOW'
+    appId: 'support-chat-prod',
+    sessionIdField: (req) => req.headers['x-session-id'] || 'anonymous',
+    scanTools: false,
+  }),
+  async (req, res) => {
+    // Verified safe! Access security scan telemetry in req.sentinelVerdict if needed
+    console.log("Verdict Meta:", req.sentinelVerdict);
+    res.json({ status: "success", text: "Verified response text." });
+  }
+);
+```
+
+### 4. Stateless Manual Gating API
 
 If you are not using Genkit or want manual control over the request/response validation checkpoints:
 
