@@ -1,0 +1,6 @@
+{
+  "name": "SentinelCore Genkit Playground",
+  "description": "An interactive safety scanner and playground for prompt defense, showing three-tier security filters, adversarial debates, and auditing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
