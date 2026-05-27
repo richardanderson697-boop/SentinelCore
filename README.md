@@ -30,7 +30,9 @@ npm install
 ### 2. Configure Environment Variables
 Create a `.env` file in the root directory:
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here  # For Tier 2/3 Claude scanning
+GEMINI_API_KEY=your_gemini_api_key_here        # Alternative Tier 2/3 model
+OPENAI_API_KEY=your_openai_api_key_here        # Optional fallback or helper
 ```
 
 ### 3. Start Development Server
