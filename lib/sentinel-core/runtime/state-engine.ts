@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import fs from "fs";
 
 export interface ScanRecord {
   scanId: string;
@@ -9,6 +10,8 @@ export interface ScanRecord {
   riskScore: number;
   timestamp: string;
   prompt: string;
+  costUsd?: number;
+  latencyMs?: number;
 }
 
 export interface AppRiskProfile {
@@ -52,6 +55,79 @@ export class PolicyStateEngine {
   private static sessionHistories: Record<string, SessionHistory> = {};
   private static toolFingerprints: Record<string, ToolFingerprint> = {};
 
+  private static PERSIST_FILE = "./sentinel-records.json";
+  private static isLoaded = false;
+
+  private static ensureLoaded(): void {
+    if (this.isLoaded) return;
+    this.isLoaded = true;
+    try {
+      if (fs.existsSync(this.PERSIST_FILE)) {
+        const raw = fs.readFileSync(this.PERSIST_FILE, "utf-8");
+        const data = JSON.parse(raw);
+        if (data.scans) this.scans = data.scans;
+        if (data.appProfiles) this.appProfiles = data.appProfiles;
+        if (data.sessionHistories) this.sessionHistories = data.sessionHistories;
+        if (data.toolFingerprints) this.toolFingerprints = data.toolFingerprints;
+      }
+    } catch (err) {
+      console.error("[PolicyStateEngine] Disk hydration bypass/failure:", err);
+    }
+
+    // Ensure default apps are always initialized
+    const defaultApps = [
+      { id: "sandbox_app", name: "Sentinel Sandbox API Console" },
+      { id: "app_prod_payments", name: "Production Payment Portal API" },
+      { id: "app_internal_crm", name: "Internal Employee CRM Bot" },
+      { id: "app_public_chat", name: "External Customer Chatbot" },
+      { id: "ide_proxy_integration", name: "IDE Proxy Integration Profile" },
+      { id: "express_integration_sandbox", name: "Express Middleware Guard Sandbox" }
+    ];
+    for (const app of defaultApps) {
+      if (!this.appProfiles[app.id]) {
+        this.appProfiles[app.id] = {
+          appId: app.id,
+          name: app.name,
+          totalScans: 0,
+          blockCount: 0,
+          flagCount: 0,
+          rollingRiskScore: 0,
+          baseThreshold: 7,
+          adaptedThreshold: 7
+        };
+      }
+    }
+
+    // Ensure default tools are initialized
+    const defaultTools = ["database_query", "send_email", "request_verification"];
+    for (const tool of defaultTools) {
+      if (!this.toolFingerprints[tool]) {
+        this.toolFingerprints[tool] = {
+          toolName: tool,
+          totalUses: 0,
+          blockedUses: 0,
+          flaggedUses: 0,
+          averageScore: 0,
+          behaviorFingerprint: "STABLE"
+        };
+      }
+    }
+  }
+
+  private static saveToFile(): void {
+    try {
+      const data = {
+        scans: this.scans,
+        appProfiles: this.appProfiles,
+        sessionHistories: this.sessionHistories,
+        toolFingerprints: this.toolFingerprints
+      };
+      fs.writeFileSync(this.PERSIST_FILE, JSON.stringify(data, null, 2), "utf-8");
+    } catch (err) {
+      console.error("[PolicyStateEngine] Disk write failure:", err);
+    }
+  }
+
   // Maximum historical scan buffer size to prevent memory leaks
   private static MAX_SCANS_LOGGED = 1000;
 
@@ -66,6 +142,7 @@ export class PolicyStateEngine {
    * Safe registration of an application profile
    */
   public static getOrCreateAppProfile(appId: string, baseThreshold = 7): AppRiskProfile {
+    this.ensureLoaded();
     const formattedId = appId || "sandbox_app";
     if (!this.appProfiles[formattedId]) {
       const appNames: Record<string, string> = {
@@ -92,6 +169,7 @@ export class PolicyStateEngine {
    * Safe registration of a user session history
    */
   public static getOrCreateSession(sessionId: string): SessionHistory {
+    this.ensureLoaded();
     const formattedId = sessionId || "session_default";
     if (!this.sessionHistories[formattedId]) {
       this.sessionHistories[formattedId] = {
@@ -111,6 +189,7 @@ export class PolicyStateEngine {
    * Safe registration of tool behavioral statistics
    */
   public static getOrCreateToolFingerprint(toolName: string): ToolFingerprint {
+    this.ensureLoaded();
     if (!this.toolFingerprints[toolName]) {
       this.toolFingerprints[toolName] = {
         toolName,
@@ -138,12 +217,15 @@ export class PolicyStateEngine {
     toolName?: string;
     toolVerdict?: "ALLOW" | "FLAG" | "BLOCK";
     toolScore?: number;
+    costUsd?: number;
+    latencyMs?: number;
   }): {
     appProfile: AppRiskProfile;
     session: SessionHistory;
     toolFingerprint?: ToolFingerprint;
   } {
-    const { scanId, appId, sessionId, prompt, verdict, riskScore, toolName, toolVerdict, toolScore } = params;
+    this.ensureLoaded();
+    const { scanId, appId, sessionId, prompt, verdict, riskScore, toolName, toolVerdict, toolScore, costUsd, latencyMs } = params;
     const promptHash = this.getPromptHash(prompt);
     const timestamp = new Date().toISOString();
 
@@ -157,6 +239,8 @@ export class PolicyStateEngine {
       riskScore,
       timestamp,
       prompt,
+      costUsd,
+      latencyMs,
     };
 
     this.scans.push(record);
@@ -231,6 +315,8 @@ export class PolicyStateEngine {
       }
     }
 
+    this.saveToFile();
+
     return {
       appProfile: app,
       session,
@@ -248,6 +334,7 @@ export class PolicyStateEngine {
     tools: ToolFingerprint[];
     lastScansList: ScanRecord[];
   } {
+    this.ensureLoaded();
     return {
       scansCount: this.scans.length,
       apps: Object.values(this.appProfiles),
@@ -265,5 +352,6 @@ export class PolicyStateEngine {
     this.appProfiles = {};
     this.sessionHistories = {};
     this.toolFingerprints = {};
+    this.saveToFile();
   }
 }

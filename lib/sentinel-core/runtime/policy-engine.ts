@@ -87,6 +87,26 @@ export class PolicyEngine {
         triggered: false,
         action: "BLOCK",
         reason: "Detected local OS command override sequence designed for server execution escalation."
+      },
+      {
+        id: "pol_supply_chain_typo",
+        name: "Dependency Typosquatting Guard (Supply Chain & Trust Safeguard)",
+        description: "Detects unverified package namespaces, typo-squatted domain names, or unapproved repository structures to prevent supply chain regression, malicious injection, and brand hijacking.",
+        matcherType: "regex",
+        expression: "\\b(expresjs|githib|micros0ft|pypl|lovalbe|vercl|npmjs-malicious|replit-unsafe)\\b",
+        triggered: false,
+        action: "FLAG",
+        reason: "Detected brand typosquatting or potential supply chain trust hijack signature pattern (e.g., githib, expresjs, micros0ft). Verify package identities before introducing code imports or commands."
+      },
+      {
+        id: "pol_hipaa_phi",
+        name: "HIPAA PHI Protection Guard",
+        description: "Scans for protected wellness records, medical charts, patient diagnostics, and unencrypted transmission of health images for HIPAA compliance guidance.",
+        matcherType: "regex",
+        expression: "\\b(mediical|medical\\s+images|patient\\s+chart|health\\s+records|mri\\s+scan|eeg\\s+report|patient\\s+diagnostics)\\b",
+        triggered: false,
+        action: "FLAG",
+        reason: "Detected potential Protected Health Information (PHI) or unencrypted medical record transfer request. Ensure strict auditing controls are configured before sharing records."
       }
     ];
 

@@ -75,7 +75,10 @@ export default function App() {
   const [flaggedCount, setFlaggedCount] = useState<number>(0);
   const [totalEstimatedCost, setTotalEstimatedCost] = useState<number>(0);
 
-  // Query state overview on mount
+  // Poll in-memory security state periodically to sync external IDE proxy events & background middleware triggers
+  const [isAutoSync, setIsAutoSync] = useState<boolean>(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date>(new Date());
+
   useEffect(() => {
     async function loadStateEngine() {
       try {
@@ -83,13 +86,23 @@ export default function App() {
         if (response.ok) {
           const data = await response.json();
           setStateOverview(data);
+          setLastSyncedAt(new Date());
         }
       } catch (err) {
-        console.error("Error loading initial safety state:", err);
+        console.error("Error loading safety state update:", err);
       }
     }
-    loadStateEngine();
-  }, []);
+
+    loadStateEngine(); // Trigger once on mount
+
+    if (!isAutoSync) return;
+
+    const interval = setInterval(() => {
+      loadStateEngine();
+    }, 2500); // Poll every 2.5 seconds
+
+    return () => clearInterval(interval);
+  }, [isAutoSync]);
 
   // Pre-configured tool parameters
   const toolProfiles: Record<string, ToolProfile> = {
@@ -103,17 +116,33 @@ export default function App() {
     applyTemplate(PROMPT_TEMPLATES[5]); // Benign query by default
   }, []);
 
-  // Sync statistics based on history
+  // Sync statistics based on system-wide stateOverview OR local history fallback
   useEffect(() => {
-    setTotalScans(history.length);
-    const blocked = history.filter(h => h.verdict.finalVerdict === 'BLOCK' || h.toolResult?.verdict === 'BLOCK').length;
-    const flagged = history.filter(h => h.verdict.finalVerdict === 'FLAG' && h.toolResult?.verdict !== 'BLOCK').length;
-    const cost = history.reduce((acc, h) => acc + h.verdict.costUsd, 0);
+    if (stateOverview) {
+      const scans = stateOverview.scansCount ?? 0;
+      const blocked = stateOverview.apps?.reduce((sum: number, a: any) => sum + (a.blockCount ?? 0), 0) ?? 0;
+      const flagged = stateOverview.apps?.reduce((sum: number, a: any) => sum + (a.flagCount ?? 0), 0) ?? 0;
+      
+      // Calculate costs from all visible scans in lastScansList, or default to history fallback
+      const lastScansCost = (stateOverview.lastScansList && stateOverview.lastScansList.length > 0)
+        ? stateOverview.lastScansList.reduce((sum: number, sc: any) => sum + (sc.costUsd ?? 0), 0)
+        : history.reduce((sum: number, h) => sum + h.verdict.costUsd, 0);
+      
+      setTotalScans(scans);
+      setBlockedCount(blocked);
+      setFlaggedCount(flagged);
+      setTotalEstimatedCost(Number(lastScansCost.toFixed(6)));
+    } else {
+      setTotalScans(history.length);
+      const blocked = history.filter(h => h.verdict.finalVerdict === 'BLOCK' || h.toolResult?.verdict === 'BLOCK').length;
+      const flagged = history.filter(h => h.verdict.finalVerdict === 'FLAG' && h.toolResult?.verdict !== 'BLOCK').length;
+      const cost = history.reduce((acc, h) => acc + h.verdict.costUsd, 0);
 
-    setBlockedCount(blocked);
-    setFlaggedCount(flagged);
-    setTotalEstimatedCost(Number(cost.toFixed(6)));
-  }, [history]);
+      setBlockedCount(blocked);
+      setFlaggedCount(flagged);
+      setTotalEstimatedCost(Number(cost.toFixed(6)));
+    }
+  }, [stateOverview, history]);
 
   const applyTemplate = (template: PromptTemplate) => {
     setPrompt(template.prompt);
@@ -352,6 +381,16 @@ export default function App() {
             onClick={() => {
               setActiveTab('scan');
               setIntegrationTab('proxy');
+              setTimeout(() => {
+                const el = document.getElementById('integration-card');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  el.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-zinc-900');
+                  setTimeout(() => {
+                    el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-zinc-900');
+                  }, 2500);
+                }
+              }, 100);
             }}
             className="self-stretch lg:self-center text-xs font-bold bg-zinc-950 text-white hover:bg-zinc-900 border border-zinc-950 px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs shrink-0 whitespace-nowrap cursor-pointer hover:shadow-sm"
           >
@@ -679,7 +718,7 @@ export default function App() {
               </div>
 
               {/* Tips & Specs card */}
-              <div className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-xl p-5 flex flex-col shadow-xs">
+              <div id="integration-card" className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-xl p-5 flex flex-col shadow-xs transition-all duration-500">
                 <div className="flex items-center justify-between mb-3 border-b border-zinc-800 pb-3">
                   <div className="flex items-center gap-1 bg-zinc-950 p-0.5 rounded border border-zinc-800">
                     <button
@@ -1429,6 +1468,143 @@ export default function App() {
                 ))}
               </div>
 
+              {/* Assure Code Bidirectional Integration Diagram */}
+              <div className="mt-12 pt-8 border-t border-zinc-100">
+                <div className="max-w-2xl mb-6">
+                  <h3 className="text-base font-bold tracking-tight text-zinc-900 flex items-center gap-2">
+                    <Gavel className="h-4.5 w-4.5 text-zinc-800" />
+                    Assure Code Bidirectional Gating Integration Workflow
+                  </h3>
+                  <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
+                    SentinelCore acts as an autonomous, independent referee inside the Assure Code compliance lifecycle. Instead of allowing self-review bias, SentinelCore judges specs, diff patches, and tool calls, automatically rerouting blocks back into remediation.
+                  </p>
+                </div>
+
+                {/* Integration Visual Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+                  
+                  {/* Assure Code Platform Core */}
+                  <div className="md:col-span-5 bg-zinc-50 border border-zinc-200 rounded-xl p-5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <span className="p-1 px-1.5 rounded bg-zinc-900 text-white text-[9px] font-mono font-bold tracking-wider">ASSURE CODE</span>
+                        <span className="text-[10px] text-zinc-400 font-mono">Platform Host</span>
+                      </div>
+                      <h4 className="text-xs font-bold text-zinc-800 font-sans">1. Governed Multi-Agent Negotiation</h4>
+                      <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed">
+                        The platform scrapes regulatory data (via Proxy-Pointer knowledge graphs) and negotiates specs, plans, and patch edits before release.
+                      </p>
+
+                      {/* Negotiators layout */}
+                      <div className="mt-3.5 p-2 bg-white border border-zinc-200 rounded-lg space-y-1.5">
+                        <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-wider block">Adversarial Agents Role-Pool:</span>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div className="p-1 bg-zinc-50 border border-zinc-100 rounded text-[9.5px] text-zinc-700 font-medium flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 bg-blue-500 rounded-full shrink-0"></span>
+                            Compliance Officer
+                          </div>
+                          <div className="p-1 bg-zinc-50 border border-zinc-100 rounded text-[9.5px] text-zinc-700 font-medium flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 bg-emerald-500 rounded-full shrink-0"></span>
+                            Security Analyst
+                          </div>
+                          <div className="p-1 bg-zinc-50 border border-zinc-100 rounded text-[9.5px] text-zinc-700 font-medium flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 bg-purple-500 rounded-full shrink-0"></span>
+                            Business Architect
+                          </div>
+                          <div className="p-1 bg-zinc-50 border border-zinc-100 rounded text-[9.5px] text-zinc-700 font-medium flex items-center gap-1">
+                            <span className="h-1.5 w-1.5 bg-amber-500 rounded-full shrink-0"></span>
+                            Mediator & Arbiter
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-2.5 border-t border-zinc-200">
+                      <div className="text-[10px] text-zinc-400 font-mono flex items-center justify-between">
+                        <span>Framework Guard:</span>
+                        <span className="text-zinc-600 font-bold">HIPAA, GDPR, SOC2</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Operational Directions & Gating */}
+                  <div className="md:col-span-2 flex flex-row md:flex-col items-center justify-center gap-4 py-3 border-y md:border-y-0 md:border-x border-zinc-100">
+                    
+                    <div className="flex flex-col items-center gap-1 flex-1 md:w-full text-center">
+                      <span className="text-[9px] font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">A. GATE</span>
+                      <div className="h-0.5 md:h-6 w-6 md:w-0.5 bg-indigo-200 my-1 justify-center items-center flex rounded">
+                        <ArrowRight className="h-3 w-3 text-indigo-500 md:rotate-90" />
+                      </div>
+                      <span className="text-[10px] text-zinc-500 font-medium leading-tight">Validate Spec, Patch & Run</span>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1 flex-1 md:w-full text-center">
+                      <span className="text-[9px] font-mono font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-150">B. REROUTE</span>
+                      <div className="h-0.5 md:h-6 w-6 md:w-0.5 bg-red-200 my-1 justify-center items-center flex rounded">
+                        <ArrowRight className="h-3 w-3 text-red-500 -rotate-180 md:-rotate-90" />
+                      </div>
+                      <span className="text-[10px] text-red-600 font-medium leading-tight">Remediation Feedback</span>
+                    </div>
+
+                  </div>
+
+                  {/* SentinelCore Security Gate */}
+                  <div className="md:col-span-5 bg-zinc-900 text-zinc-100 rounded-xl p-5 flex flex-col justify-between border border-zinc-800">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-3">
+                        <span className="p-1 px-1.5 rounded bg-indigo-600 text-white text-[9px] font-mono font-bold tracking-wider">SENTINELCORE GATE</span>
+                        <span className="text-[10px] text-zinc-500 font-mono">Independent Referee</span>
+                      </div>
+                      <h4 className="text-xs font-bold text-white font-sans">2. Multi-Tier Risk Adjudication</h4>
+                      <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                        Executes semantic threat audits on user plans, completed specs, and git-bound patch configurations prior to physical execution.
+                      </p>
+
+                      {/* Gating logic metrics */}
+                      <div className="mt-3.5 p-2 bg-zinc-950 border border-zinc-800 rounded-lg space-y-1.5 font-mono text-[9.5px]">
+                        <div className="flex justify-between text-zinc-400">
+                          <span>Risk Assessment Score:</span>
+                          <span className="text-indigo-400 font-bold">0 .. 10 Risk Scale</span>
+                        </div>
+                        <div className="flex justify-between text-zinc-400">
+                          <span>Adjudication Verdict:</span>
+                          <span className="text-emerald-400 font-bold">ALLOW | FLAG | BLOCK</span>
+                        </div>
+                        <div className="flex justify-between text-zinc-400">
+                          <span>Audited Signatures:</span>
+                          <span className="text-zinc-300">HIPAA PHI, PII, Overrides</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-2.5 border-t border-zinc-800">
+                      <div className="text-[10px] text-zinc-500 font-mono flex items-center justify-between">
+                        <span>Operational Mode:</span>
+                        <span className="text-indigo-400 font-bold">API Proxy / Middleware</span>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Secure Remediation Sub-loop description */}
+                <div className="mt-6 p-4 rounded-xl bg-indigo-50/40 border border-indigo-100 text-xs text-zinc-600 leading-relaxed">
+                  <div className="flex items-start gap-3">
+                    <UserCheck className="h-4.5 w-4.5 text-indigo-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-zinc-800 block mb-1 font-sans">Preventing Self-Review Hazards via Sovereign Referees</strong>
+                      Allowing an AI generation network inside Assure Code to decide if its own patches are secure creates structural blindspots (self-review bias). By appointing SentinelCore as an independent referee:
+                      <ul className="list-disc pl-4 mt-2 space-y-1.5 text-zinc-500 text-[11px]">
+                        <li><strong>Instant Block & Halt</strong>: When SentinelCore triggers a <span className="text-red-600 font-bold font-mono">BLOCK</span> verdict, the deployment pipeline freezes instantly.</li>
+                        <li><strong>Targeted Remediation Loop</strong>: SentinelCore attaches structured error artifacts and **reroutes the task back specifically to the Security Analyst and Compliance Officer agents** within Assure Code.</li>
+                        <li><strong>Peer-Signed Recovery</strong>: The local dashboard records the violation audit, requiring human sign-off evidence prior to unlocking GitHub merge workflows.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
             </div>
           </div>
         )}
@@ -1553,21 +1729,37 @@ export default function App() {
             {/* Header Description block */}
             <div className="bg-white border border-zinc-200 rounded-xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xs">
               <div className="max-w-2xl">
-                <h2 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-2">
+                <h2 className="text-xl font-bold tracking-tight text-zinc-900 flex items-center gap-2 flex-wrap">
                   <Database className="h-5 w-5 text-indigo-650" />
-                  Policy State Engine
+                  <span>Policy State Engine</span>
+                  <span className="flex items-center gap-1.5 text-xs font-mono font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100/60 mt-0.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Real-Time Proxy Sync {isAutoSync ? 'Active' : 'Paused'}</span>
+                  </span>
                 </h2>
                 <p className="text-sm text-zinc-500 mt-2 leading-relaxed">
                   This core module tracks active entity profiles, aggregates rolling threat levels, handles dynamic debate threshold modification, and triggers escalation lockouts. Perfect for zero-trust protection across multiple isolated client applications.
                 </p>
               </div>
-              <button
-                onClick={handleResetState}
-                className="self-start md:self-auto text-xs font-semibold text-red-600 border border-red-200 hover:border-red-600 hover:bg-red-50 px-4 py-2.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition shadow-xs"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Reset State Engine metrics
-              </button>
+              <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+                <button
+                  onClick={() => setIsAutoSync(!isAutoSync)}
+                  className={`text-xs font-bold px-3 py-2 rounded-lg border transition shadow-xs flex items-center gap-1.5 cursor-pointer ${
+                    isAutoSync 
+                      ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-250' 
+                      : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                  }`}
+                >
+                  <span>{isAutoSync ? '⏸ Pause Monitor' : '▶ Resume Monitor'}</span>
+                </button>
+                <button
+                  onClick={handleResetState}
+                  className="text-xs font-semibold text-red-600 border border-red-200 hover:border-red-600 hover:bg-red-50 px-4 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Reset Engine
+                </button>
+              </div>
             </div>
 
             {/* Quick Metrics Cards */}
@@ -1875,6 +2067,9 @@ export default function App() {
                               {sc.appId === "app_prod_payments" && "💰 Payments"}
                               {sc.appId === "app_internal_crm" && "👥 CRM"}
                               {sc.appId === "app_public_chat" && "💬 Chatbot"}
+                              {sc.appId === "ide_proxy_integration" && "🔌 IDE Proxy"}
+                              {sc.appId === "express_integration_sandbox" && "🛡️ Express"}
+                              {!["sandbox_app", "app_prod_payments", "app_internal_crm", "app_public_chat", "ide_proxy_integration", "express_integration_sandbox"].includes(sc.appId) && sc.appId}
                             </td>
                             <td className="py-3.5 px-2 font-black text-indigo-700">
                               {sc.sessionId}

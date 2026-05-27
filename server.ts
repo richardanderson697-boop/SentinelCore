@@ -21,6 +21,18 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Handle CORS and Preflight OPTIONS requests for cross-origin compliance tools/agents (e.g. Base44 App)
+app.use((req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "X-Requested-With, Content-Type, Authorization, x-session-id, x-app-id");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
+
 // Singleton Circuit Breaker to prevent model endpoint cascading failure
 const modelBreaker = new CircuitBreaker({
   failureThreshold: 3,
@@ -190,7 +202,9 @@ app.post("/api/scan", async (req, res) => {
         riskScore: policyResult.score,
         toolName: scanTools ? toolName : undefined,
         toolVerdict: scanTools ? "BLOCK" : undefined,
-        toolScore: scanTools ? policyResult.score : undefined
+        toolScore: scanTools ? policyResult.score : undefined,
+        costUsd: 0,
+        latencyMs: 12
       });
 
       res.json({
@@ -306,7 +320,9 @@ app.post("/api/scan", async (req, res) => {
       riskScore: verdict.finalScore,
       toolName: scanTools ? toolName : undefined,
       toolVerdict: scanTools ? toolResult?.verdict : undefined,
-      toolScore: scanTools ? toolResult?.score : undefined
+      toolScore: scanTools ? toolResult?.score : undefined,
+      costUsd: verdict.costUsd,
+      latencyMs: verdict.latencyMs
     });
 
     res.json({
@@ -395,6 +411,9 @@ app.post("/v1/chat/completions", async (req, res) => {
       }
     }
 
+    const proxyLatency = finalVerdict === "BLOCK" ? 22 : 980;
+    const proxyCost = finalVerdict === "BLOCK" ? 0 : 0.0018;
+
     // Persist to State Engine so metrics updates are captured in the live dashboard app
     PolicyStateEngine.persistAndAggregate({
       scanId: "sc_proxy_" + Math.random().toString(36).substring(2, 11),
@@ -403,6 +422,8 @@ app.post("/v1/chat/completions", async (req, res) => {
       prompt: promptText,
       verdict: finalVerdict,
       riskScore: finalScore,
+      costUsd: proxyCost,
+      latencyMs: proxyLatency
     });
 
     // 2. If blocked, return a structured warning directly in assistant response
@@ -774,7 +795,9 @@ function simulateSentinelCoreLocal(
     riskScore: finalScore,
     toolName: scanTools ? toolName : undefined,
     toolVerdict: scanTools ? toolResult?.verdict : undefined,
-    toolScore: scanTools ? toolResult?.score : undefined
+    toolScore: scanTools ? toolResult?.score : undefined,
+    costUsd: Number(baseCost.toFixed(6)),
+    latencyMs: baseLatency
   });
 
   return {
