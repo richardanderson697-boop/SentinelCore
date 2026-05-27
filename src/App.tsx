@@ -58,17 +58,67 @@ export default function App() {
 
   // Policy State Engine Variables
   const [appId, setAppId] = useState<string>('sandbox_app');
-  const [sessionId, setSessionId] = useState<string>('sess_' + Math.floor(1000 + Math.random() * 9000));
+  const [sessionId, setSessionId] = useState<string>(() => {
+    const saved = localStorage.getItem('sentinel_session_id');
+    if (saved) return saved;
+    const newId = 'sess_' + Math.floor(1000 + Math.random() * 9000);
+    localStorage.setItem('sentinel_session_id', newId);
+    return newId;
+  });
   const [stateOverview, setStateOverview] = useState<any>(null);
 
   // App States
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [scanStep, setScanStep] = useState<number>(0); // 0: Idle, 1: Tier 1, 2: Tier 2, 3: Tier 3
   const [result, setResult] = useState<ScanResponse | null>(null);
-  const [history, setHistory] = useState<ScanResponse[]>([]);
-  const [activeTab, setActiveTab] = useState<'scan' | 'architecture' | 'history' | 'state-engine'>('scan');
-  const [integrationTab, setIntegrationTab] = useState<'genkit' | 'express' | 'proxy'>('genkit');
-  
+  const [history, setHistory] = useState<ScanResponse[]>(() => {
+    try {
+      const saved = localStorage.getItem('sentinel_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [activeTab, setActiveTabState] = useState<'scan' | 'architecture' | 'history' | 'state-engine'>(() => {
+    const saved = localStorage.getItem('sentinel_active_tab');
+    return (saved as any) || 'scan';
+  });
+  const [integrationTab, setIntegrationTabState] = useState<'genkit' | 'express' | 'proxy'>(() => {
+    const saved = localStorage.getItem('sentinel_integration_tab');
+    return (saved as any) || 'genkit';
+  });
+
+  const setActiveTab = (tab: 'scan' | 'architecture' | 'history' | 'state-engine') => {
+    setActiveTabState(tab);
+    localStorage.setItem('sentinel_active_tab', tab);
+  };
+
+  const setIntegrationTab = (tab: 'genkit' | 'express' | 'proxy') => {
+    setIntegrationTabState(tab);
+    localStorage.setItem('sentinel_integration_tab', tab);
+  };
+
+  // Sync to local storage
+  useEffect(() => {
+    localStorage.setItem('sentinel_history', JSON.stringify(history));
+  }, [history]);
+
+  useEffect(() => {
+    if (prompt) localStorage.setItem('sentinel_prompt', prompt);
+  }, [prompt]);
+
+  useEffect(() => {
+    localStorage.setItem('sentinel_scan_tools', String(scanTools));
+  }, [scanTools]);
+
+  useEffect(() => {
+    if (selectedTool) localStorage.setItem('sentinel_selected_tool', selectedTool);
+  }, [selectedTool]);
+
+  useEffect(() => {
+    if (toolInput) localStorage.setItem('sentinel_tool_input', toolInput);
+  }, [toolInput]);
+
   // Stats
   const [totalScans, setTotalScans] = useState<number>(0);
   const [blockedCount, setBlockedCount] = useState<number>(0);
@@ -111,9 +161,20 @@ export default function App() {
     'get_weather': { sensitivity: 'NONE', scanInputs: false }
   };
 
-  // Pre-load default template on mount
+  // Pre-load saved workspace inputs or fallback to benign template on mount
   useEffect(() => {
-    applyTemplate(PROMPT_TEMPLATES[5]); // Benign query by default
+    const savedPrompt = localStorage.getItem('sentinel_prompt');
+    if (!savedPrompt) {
+      applyTemplate(PROMPT_TEMPLATES[5]); // Benign query by default
+    } else {
+      setPrompt(savedPrompt);
+      const savedScanTools = localStorage.getItem('sentinel_scan_tools');
+      if (savedScanTools !== null) setScanTools(savedScanTools === 'true');
+      const savedSelectedTool = localStorage.getItem('sentinel_selected_tool');
+      if (savedSelectedTool) setSelectedTool(savedSelectedTool);
+      const savedToolInput = localStorage.getItem('sentinel_tool_input');
+      if (savedToolInput) setToolInput(savedToolInput);
+    }
   }, []);
 
   // Sync statistics based on system-wide stateOverview OR local history fallback
