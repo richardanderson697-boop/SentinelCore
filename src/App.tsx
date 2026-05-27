@@ -756,19 +756,18 @@ export default function App() {
                     v1.2.4 SDK
                   </span>
                 </div>
-
-                {integrationTab === 'genkit' && (
+                 {integrationTab === 'genkit' && (
                   <>
                     <p className="text-[11px] text-zinc-400 mb-3">
-                      Instantiate request-boundary middlewares and tool wrappers directly within your Genkit pipeline:
+                      Instantiate request-boundary middlewares and tool wrappers directly within your Genkit pipeline using the unified <code className="text-indigo-400">sentinelCore()</code> factory:
                     </p>
                     <div className="bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-[9px] text-zinc-300 overflow-x-auto space-y-2 max-h-72 mb-3">
                       <div>
-                        <span className="text-purple-400">import</span> &#123; SentinelGenkitMiddleware, sentinelCorePlugin &#125; <span className="text-purple-400">from</span> <span className="text-emerald-400">'@sentinelcore/sdk'</span>;
+                        <span className="text-purple-400">import</span> &#123; sentinelCore &#125; <span className="text-purple-400">from</span> <span className="text-emerald-400">'@sentinelcore/sdk'</span>;
                       </div>
                       <div>
                         <span className="text-zinc-500">// 1. Instantiate with fail-secure behavior</span><br />
-                        <span className="text-blue-400">const</span> sentinel = <span className="text-blue-400">new</span> <span className="text-emerald-400">SentinelGenkitMiddleware</span>(&#123;<br />
+                        <span className="text-blue-400">const</span> sentinel = <span className="text-blue-400">sentinelCore</span>(&#123;<br />
                         &nbsp;&nbsp;failSecure: <span className="text-emerald-400">'BLOCK'</span>,<br />
                         &nbsp;&nbsp;scanTools: <span className="text-purple-400">true</span><br />
                         &#125;);
@@ -783,10 +782,10 @@ export default function App() {
                         );
                       </div>
                       <div>
-                        <span className="text-zinc-500">// 3. Or register globally as a plugin</span><br />
+                        <span className="text-zinc-500">// 3. Or register globally as a plugin directly</span><br />
                         <span className="text-blue-400">const</span> ai = <span className="text-blue-400">genkit</span>(&#123;<br />
                         &nbsp;&nbsp;plugins: [<br />
-                        &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-blue-400">sentinelCorePlugin</span>(&#123; failSecure: <span className="text-emerald-400">'BLOCK'</span> &#125;)<br />
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-blue-400">sentinelCore</span>(&#123; failSecure: <span className="text-emerald-400">'BLOCK'</span> &#125;)<br />
                         &nbsp;&nbsp;]<br />
                         &#125;);
                       </div>
@@ -797,13 +796,13 @@ export default function App() {
                 {integrationTab === 'express' && (
                   <>
                     <p className="text-[11px] text-zinc-400 mb-3">
-                      Secure standard Node.js Express routes using the native HTTP gating middleware:
+                      Secure standard Node.js Express routes using the native unified Express middleware:
                     </p>
                     <div className="bg-zinc-950 p-2.5 rounded border border-zinc-800 font-mono text-[9px] text-zinc-300 overflow-x-auto space-y-2 max-h-72 mb-3">
                       <div>
                         <span className="text-purple-400">import</span> express <span className="text-purple-400">from</span> <span className="text-emerald-400">'express'</span>;
                         <br />
-                        <span className="text-purple-400">import</span> &#123; sentinelCoreExpressMiddleware &#125; <span className="text-purple-400">from</span> <span className="text-emerald-400">'@sentinelcore/sdk'</span>;
+                        <span className="text-purple-400">import</span> &#123; sentinelCore &#125; <span className="text-purple-400">from</span> <span className="text-emerald-400">'@sentinelcore/sdk'</span>;
                       </div>
                       <div>
                         <span className="text-blue-400">const</span> app = <span className="text-blue-400">express</span>();
@@ -814,7 +813,7 @@ export default function App() {
                         <span className="text-zinc-500">// Register middleware to scan prompt body and session headers</span><br />
                         app.<span className="text-blue-400">post</span>(<br />
                         &nbsp;&nbsp;<span className="text-emerald-400">'/api/generate'</span>,<br />
-                        &nbsp;&nbsp;<span className="text-blue-400 font-bold">sentinelCoreExpressMiddleware</span>(&#123;<br />
+                        &nbsp;&nbsp;<span className="text-blue-400">sentinelCore</span>.<span className="text-blue-400 font-bold">express</span>(&#123;<br />
                         &nbsp;&nbsp;&nbsp;&nbsp;promptField: <span className="text-emerald-400">'prompt'</span>,<br />
                         &nbsp;&nbsp;&nbsp;&nbsp;failSecure: <span className="text-emerald-400">'BLOCK'</span>,<br />
                         &nbsp;&nbsp;&nbsp;&nbsp;appId: <span className="text-emerald-400">'express_customer_support'</span>,<br />

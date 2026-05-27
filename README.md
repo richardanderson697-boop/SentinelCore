@@ -71,15 +71,15 @@ You can integrate the core SentinelCore gate directly into your own Node.js back
 
 ```typescript
 import express from "express";
-import { sentinelCoreExpressMiddleware } from "./lib/sentinel-core/express";
+import { sentinelCore } from "./lib/sentinel-core";
 
 const app = express();
 app.use(express.json());
 
-// Register sentinelCoreExpressMiddleware on your LLM routes
+// Register unified sentinelCore middleware on your LLM routes
 app.post(
   "/api/generate",
-  sentinelCoreExpressMiddleware({
+  sentinelCore.express({
     promptField: "prompt",            // Field in req.body to scan
     appId: "customer_support_app",   // Application audit profile ID
     failSecure: "BLOCK",             // Fail secure policy (reject with 403 on risk)

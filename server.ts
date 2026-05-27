@@ -12,7 +12,7 @@ import { CostEstimator } from "./lib/sentinel-core/runtime/cost";
 import { ValidationGuard } from "./lib/sentinel-core/validation/guard";
 import { PolicyEngine } from "./lib/sentinel-core/runtime/policy-engine";
 import { PolicyStateEngine } from "./lib/sentinel-core/runtime/state-engine";
-import { sentinelCoreExpressMiddleware } from "./lib/sentinel-core/express";
+import { sentinelCore } from "./lib/sentinel-core";
 
 dotenv.config();
 
@@ -341,7 +341,7 @@ app.post("/api/scan", async (req, res) => {
 // Demo endpoint strictly gated by the ready-to-use SentinelCore Express Middleware
 app.post(
   "/api/protected/chat-demo",
-  sentinelCoreExpressMiddleware({
+  sentinelCore.express({
     promptField: "prompt", // extracts from req.body.prompt
     failSecure: "BLOCK",   // rejects (blocks) with 403 upon BLOCK/FLAG
     appId: "express_integration_sandbox",

@@ -32,16 +32,16 @@ npm install git+https://github.com/your-org/sentinel-core.git
 
 ### 1. Integrating with Google Genkit
 
-Register SentinelCore as a plugin on your Genkit instance. It hooks directly into standard model-generation cycles:
+Register SentinelCore as a plugin on your Genkit instance. It hooks directly into standard model-generation cycles using the unified `sentinelCore` factory:
 
 ```typescript
 import { genkit } from 'genkit';
-import { sentinelCorePlugin } from 'sentinel-core-sdk';
+import { sentinelCore } from 'sentinel-core-sdk';
 
 const ai = genkit({
   plugins: [
-    // Registers pre-prompt security evaluators
-    sentinelCorePlugin({
+    // Registers pre-prompt security evaluators on the Genkit instance
+    sentinelCore({
       failSecure: "BLOCK", // "BLOCK" | "FLAG" | "ALLOW"
       tierDebateThreshold: 7, // Custom base severity threshold
       scanTools: true, // Enables validation of inputs to tools
@@ -52,13 +52,13 @@ const ai = genkit({
 
 ### 2. Wrapping Dangerous Tools Securely
 
-Prevent prompt-injection subversions in tools like database querying or emails by wrapping them with `SentinelGenkitMiddleware`:
+Prevent prompt-injection subversions in tools like database querying or emails using the same instanced wrapper:
 
 ```typescript
 import { genkit, defineTool } from 'genkit';
-import { SentinelGenkitMiddleware } from 'sentinel-core-sdk';
+import { sentinelCore } from 'sentinel-core-sdk';
 
-const security = new SentinelGenkitMiddleware({ failSecure: "BLOCK" });
+const security = sentinelCore({ failSecure: "BLOCK" });
 
 export const queryDatabase = defineTool(
   {
@@ -76,11 +76,11 @@ export const queryDatabase = defineTool(
 
 ### 3. Securing Express.js Endpoints with Gating Middleware
 
-For standard (non-Genkit) Web apps, secure any API endpoint instantly using the native Express middleware:
+For standard (non-Genkit) Web apps, secure any API endpoint instantly using the unified Express middleware generator:
 
 ```typescript
 import express from 'express';
-import { sentinelCoreExpressMiddleware } from 'sentinel-core-sdk';
+import { sentinelCore } from 'sentinel-core-sdk';
 
 const app = express();
 app.use(express.json());
@@ -88,7 +88,7 @@ app.use(express.json());
 // Protect generation backend. Violations automatically yield a 403 response.
 app.post(
   '/api/generate',
-  sentinelCoreExpressMiddleware({
+  sentinelCore.express({
     promptField: 'prompt', // Extract from req.body.prompt (or a custom function)
     failSecure: 'BLOCK',   // 'BLOCK' | 'FLAG' | 'ALLOW'
     appId: 'support-chat-prod',
