@@ -45,7 +45,7 @@ This boots the Express proxy backend and the React hot-reload dashboard on **`ht
 
 ## 🔌 IDE Integration (Cursor, VS Code, Lovable, Replit)
 
-Once Sentinelcore is running locally on your laptop or inside your private VPC, you can route all AI workspace traffic through it to enforce compliance and data leakage rules automatically.
+Once SentimentCore is running locally on your laptop or inside your private VPC, you can route all AI workspace traffic through it to enforce compliance and data leakage rules automatically.
 
 ### Configuration
 Update your IDE's OpenAI-compatible proxy settings:

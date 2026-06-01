@@ -1,3 +1,5 @@
+import vm from "vm";
+
 export interface PolicyRule {
   id: string;
   name: string;
@@ -15,6 +17,24 @@ export interface PolicyEngineResult {
   score: number;
   reasoning: string;
   rules: PolicyRule[];
+}
+
+/**
+ * Executes a regular expression test inside a sandboxed VM context with a strict execution timeout.
+ * This completely isolates the event loop, neutralizing Catastrophic Backtracking (ReDoS) vectors.
+ */
+function safeRegexTest(expression: string, text: string, timeoutMs = 50): boolean {
+  try {
+    const regex = new RegExp(expression, "i");
+    const sandbox = { regex, text, result: false };
+    vm.createContext(sandbox);
+    vm.runInContext("result = regex.test(text);", sandbox, { timeout: timeoutMs });
+    return sandbox.result;
+  } catch (err: any) {
+    console.warn(`[SentinelCore ReDoS Shield] Threat Check Timeout (possible ReDoS) on pattern "${expression}":`, err.message);
+    // Fail-secure: treat timeout anomalies as matching patterns to block bypass tricks
+    return true;
+  }
 }
 
 export class PolicyEngine {
@@ -118,8 +138,10 @@ export class PolicyEngine {
     for (const rule of rules) {
       if (rule.matcherType === 'regex') {
         try {
-          const regex = new RegExp(rule.expression, 'i');
-          if (regex.test(prompt) || (toolInput && regex.test(toolInput))) {
+          const isPromptMatch = safeRegexTest(rule.expression, prompt);
+          const isToolInputMatch = toolInput ? safeRegexTest(rule.expression, toolInput) : false;
+          
+          if (isPromptMatch || isToolInputMatch) {
             rule.triggered = true;
             firedReasons.push(`${rule.name}: ${rule.reason}`);
             

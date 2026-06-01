@@ -253,17 +253,21 @@ export function sentinelCoreExpressMiddleware(options: SentinelExpressMiddleware
         timestamp: new Date().toISOString(),
       };
 
-      // 5. Update Policies State Engine session audit and counters
-      PolicyStateEngine.persistAndAggregate({
-        scanId: verdictPayload.scanId,
-        appId: activeAppId,
-        sessionId: activeSessionId,
-        prompt: promptText,
-        verdict: finalVerdict,
-        riskScore: finalScore,
-        toolName: scanTools ? activeToolName : undefined,
-        toolVerdict: scanTools && finalVerdict === "BLOCK" ? "BLOCK" : undefined,
-      });
+       // 5. Update Policies State Engine session audit and counters (Hardened error shield)
+      try {
+        PolicyStateEngine.persistAndAggregate({
+          scanId: verdictPayload.scanId,
+          appId: activeAppId,
+          sessionId: activeSessionId,
+          prompt: promptText,
+          verdict: finalVerdict,
+          riskScore: finalScore,
+          toolName: scanTools ? activeToolName : undefined,
+          toolVerdict: scanTools && finalVerdict === "BLOCK" ? "BLOCK" : undefined,
+        });
+      } catch (telemetryErr) {
+        console.error("[SentinelCore Express Telemetry Loss Warning]:", telemetryErr);
+      }
 
       // Attach scan results to Request object for downline router access
       req.sentinelVerdict = verdictPayload;

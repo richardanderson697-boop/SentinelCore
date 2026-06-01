@@ -192,20 +192,24 @@ app.post("/api/scan", async (req, res) => {
         };
       }
 
-      // Stateful engine tracking update
-      PolicyStateEngine.persistAndAggregate({
-        scanId: verdictId,
-        appId,
-        sessionId,
-        prompt,
-        verdict: "BLOCK",
-        riskScore: policyResult.score,
-        toolName: scanTools ? toolName : undefined,
-        toolVerdict: scanTools ? "BLOCK" : undefined,
-        toolScore: scanTools ? policyResult.score : undefined,
-        costUsd: 0,
-        latencyMs: 12
-      });
+      // Stateful engine tracking update (Hardened error shield)
+      try {
+        PolicyStateEngine.persistAndAggregate({
+          scanId: verdictId,
+          appId,
+          sessionId,
+          prompt,
+          verdict: "BLOCK",
+          riskScore: policyResult.score,
+          toolName: scanTools ? toolName : undefined,
+          toolVerdict: scanTools ? "BLOCK" : undefined,
+          toolScore: scanTools ? policyResult.score : undefined,
+          costUsd: 0,
+          latencyMs: 12
+        });
+      } catch (telemetryErr) {
+        console.error("[SentinelCore Telemetry Loss Warning]:", telemetryErr);
+      }
 
       res.json({
         verdict,
@@ -310,20 +314,24 @@ app.post("/api/scan", async (req, res) => {
       blockSimulated = true;
     }
 
-    // Stateful engine tracking update
-    PolicyStateEngine.persistAndAggregate({
-      scanId: verdictId,
-      appId,
-      sessionId,
-      prompt,
-      verdict: verdict.finalVerdict,
-      riskScore: verdict.finalScore,
-      toolName: scanTools ? toolName : undefined,
-      toolVerdict: scanTools ? toolResult?.verdict : undefined,
-      toolScore: scanTools ? toolResult?.score : undefined,
-      costUsd: verdict.costUsd,
-      latencyMs: verdict.latencyMs
-    });
+    // Stateful engine tracking update (Hardened error shield)
+    try {
+      PolicyStateEngine.persistAndAggregate({
+        scanId: verdictId,
+        appId,
+        sessionId,
+        prompt,
+        verdict: verdict.finalVerdict,
+        riskScore: verdict.finalScore,
+        toolName: scanTools ? toolName : undefined,
+        toolVerdict: scanTools ? toolResult?.verdict : undefined,
+        toolScore: scanTools ? toolResult?.score : undefined,
+        costUsd: verdict.costUsd,
+        latencyMs: verdict.latencyMs
+      });
+    } catch (telemetryErr) {
+      console.error("[SentinelCore Telemetry Loss Warning]:", telemetryErr);
+    }
 
     res.json({
       verdict,
@@ -414,17 +422,21 @@ app.post("/v1/chat/completions", async (req, res) => {
     const proxyLatency = finalVerdict === "BLOCK" ? 22 : 980;
     const proxyCost = finalVerdict === "BLOCK" ? 0 : 0.0018;
 
-    // Persist to State Engine so metrics updates are captured in the live dashboard app
-    PolicyStateEngine.persistAndAggregate({
-      scanId: "sc_proxy_" + Math.random().toString(36).substring(2, 11),
-      appId: "ide_proxy_integration",
-      sessionId: "ide_session_global",
-      prompt: promptText,
-      verdict: finalVerdict,
-      riskScore: finalScore,
-      costUsd: proxyCost,
-      latencyMs: proxyLatency
-    });
+    // Persist to State Engine so metrics updates are captured in the live dashboard app (Hardened error shield)
+    try {
+      PolicyStateEngine.persistAndAggregate({
+        scanId: "sc_proxy_" + Math.random().toString(36).substring(2, 11),
+        appId: "ide_proxy_integration",
+        sessionId: "ide_session_global",
+        prompt: promptText,
+        verdict: finalVerdict,
+        riskScore: finalScore,
+        costUsd: proxyCost,
+        latencyMs: proxyLatency
+      });
+    } catch (telemetryErr) {
+      console.error("[SentinelCore Telemetry Loss Warning]:", telemetryErr);
+    }
 
     // 2. If blocked, return a structured warning directly in assistant response
     if (finalVerdict === "BLOCK") {
